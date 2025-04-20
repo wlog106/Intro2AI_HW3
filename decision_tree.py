@@ -52,16 +52,30 @@ class DecisionTree:
         left_dataset_y = []
         right_dataset_X = []
         right_dataset_y = []
-        for 
+        for img_feature in X:
+            if img_feature[feature_index] <= threshold:
+                left_dataset_X.append(img_feature)
+                left_dataset_y.append(y[feature_index])
+            else:
+                right_dataset_X.append(img_feature)
+                right_dataset_y.append(y[feature_index])
         return left_dataset_X, left_dataset_y, right_dataset_X, right_dataset_y
 
     def _best_split(self, X: pd.DataFrame, y: np.ndarray):
         # (TODO) Use Information Gain to find the best split for a dataset
         best_feature_index = 0
         max_information_gain = 0
-        for feature_index in range(len(X)):
-            self._split_data(X, y, feature_index, threshold)
-            information_gain = self._entropy(y) + len(X[:index])/len(X)*X[:index] + len(X[index:])
+        for feature_index in range(X.shape[1]):
+            for i in range(X.shapep[0]):
+                left_dataset_X, left_dataset_y, right_dataset_X, right_dataset_y = self._split_data(X, y, feature_index, threshold)
+                information_gain = (
+                    self._entropy(y) 
+                    - (len(left_dataset_y)/len(y))*self._entropy(left_dataset_y) 
+                    - (len(right_dataset_y)/len(y))*self._entropy(right_dataset_y)
+                )
+                if information_gain > max_information_gain:
+                    max_information_gain = information_gain
+                    best_feature_index = feature_index
 
         return best_feature_index, best_threshold
 
@@ -77,7 +91,8 @@ def get_features_and_labels(model: ConvNet, dataloader: DataLoader, device)->Tup
         images = images.to(device)
         features: torch.Tensor = model.foward_features(images)
         labels = labels + label
-    features = features.flatten().cpu().tolist()
+    pool = nn.AvgPool2d(7, stride=1)
+    features = pool(features).cpu().tolist()
     return features, labels
 
 @torch.no_grad()
@@ -86,7 +101,7 @@ def get_features_and_paths(model: ConvNet, dataloader: DataLoader, device)->Tupl
     for images, base_name in dataloader:
         images = images.to(device)
         features = model.forward_features(images)
-
-    features = features.cpu().tolist()
+    pool = nn.AvgPool2d(7, stride=1)
+    features = pool(features).cpu().tolist()
     paths = ["data/test/" + id + ".jpg" for id in base_name.tolist()]
     return features, paths
