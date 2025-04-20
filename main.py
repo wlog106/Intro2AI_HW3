@@ -18,6 +18,7 @@ Notice:
 """
 
 def main():
+    bypassCNN = True
     """
     load data
     """
@@ -34,59 +35,60 @@ def main():
     val_dataset = TrainDataset(val_images, val_labels)
     test_dataset = TestDataset(test_images)
     
-    """
-    CNN - train and validate
-    """
-    logger.info("Start training CNN")
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    if not bypassCNN:
+        """
+        CNN - train and validate
+        """
+        logger.info("Start training CNN")
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = CNN().to(device)
-    criterion = nn.CrossEntropyLoss()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = CNN().to(device)
+        criterion = nn.CrossEntropyLoss()
 
-    # Optimizer configuration
-    base_params = [param for name, param in model.named_parameters() if param.requires_grad]
-    optimizer = optim.Adam(base_params, lr=1.5*1e-4)
+        # Optimizer configuration
+        base_params = [param for name, param in model.named_parameters() if param.requires_grad]
+        optimizer = optim.Adam(base_params, lr=1.5*1e-4)
 
-    train_losses = []
-    val_losses = []
-    max_acc = 0
+        train_losses = []
+        val_losses = []
+        max_acc = 0
 
-    EPOCHS = 10
-    for epoch in range(EPOCHS): #epoch
-        train_loss = train(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc = validate(model, val_loader, criterion, device)
+        EPOCHS = 10
+        for epoch in range(EPOCHS): #epoch
+            train_loss = train(model, train_loader, criterion, optimizer, device)
+            val_loss, val_acc = validate(model, val_loader, criterion, device)
 
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
 
-        max_acc = max(max_acc, val_acc)
+            max_acc = max(max_acc, val_acc)
 
-        # (TODO) Print the training log to help you monitor the training process
-        #        You can save the model for future usage
-        print("Result of epoch ", end="")
-        print(epoch+1)
-        print("train loss: ", end="")
-        print(train_loss)
-        print("valid loss: ", end="")
-        print(val_loss)
-        print("valid accuracy: ", end="")
-        print(val_acc)
-        print()
+            # (TODO) Print the training log to help you monitor the training process
+            #        You can save the model for future usage
+            print("Result of epoch ", end="")
+            print(epoch+1)
+            print("train loss: ", end="")
+            print(train_loss)
+            print("valid loss: ", end="")
+            print(val_loss)
+            print("valid accuracy: ", end="")
+            print(val_acc)
+            print()
 
-    logger.info(f"Best Accuracy: {max_acc:.4f}")
+        logger.info(f"Best Accuracy: {max_acc:.4f}")
 
-    """
-    CNN - plot
-    """
-    plot(train_losses, val_losses)
+        """
+        CNN - plot
+        """
+        plot(train_losses, val_losses)
 
-    """
-    CNN - test
-    """
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-    test(model, test_loader, criterion, device)
+        """
+        CNN - test
+        """
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+        test(model, test_loader, criterion, device)
 
     """
     Decision Tree - grow tree and validate
