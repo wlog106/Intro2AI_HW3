@@ -44,15 +44,41 @@ class DecisionTree:
             return {"isLeaf": True, "predict": y[0]}
 
         tree = {}
-        best_feature_index, best_threshold = self._best_split(X, y)
-        left_dataset_X, left_dataset_y, right_dataset_X, right_dataset_y = self._split_data(
-            X, y, best_feature_index, best_threshold
-        )
-        tree["best_feature_index"] = best_feature_index
-        tree["best_threshold"] = best_threshold
-        tree["left"] = self._build_tree(left_dataset_X, left_dataset_y, depth-1)
-        tree["right"] = self._build_tree(right_dataset_X, right_dataset_y, depth-1)
-        tree["isLeaf"] = False
+        best_feature_index, best_threshold_index = self._best_split(X, y)
+        if best_threshold_index == -1:
+            predict = np.argmax(np.bincount(y))
+            return {"isLeaf": True, "predict": predict}
+        else:
+            best_sorted_indices = np.argsort(X[:, best_feature_index])
+            X_sorted = X[best_sorted_indices]
+            y_sorted = y[best_sorted_indices]
+            left_dataset_X, left_dataset_y, right_dataset_X, right_dataset_y = self._split_data(
+                X_sorted, y_sorted, best_threshold_index
+            )
+            tree["best_feature_index"] = best_feature_index
+            tree["best_threshold"] = (
+                            X[best_sorted_indices[best_threshold_index], best_feature_index] 
+                            + X[best_sorted_indices[best_threshold_index+1], best_feature_index]
+                        )/2
+            # left branch
+            if left_dataset_y.size == 0:
+                predict = np.argmax(np.bincount(y))
+                tree["left"] = {"isLeaf": True, "predict": predict}
+            elif left_dataset_y.size < 5:
+                predict = np.argmax(np.bincount(left_dataset_y))
+                tree["left"] = {"isLeaf": True, "predict": predict}
+            else:
+                tree["left"] = self._build_tree(left_dataset_X, left_dataset_y, depth-1)
+            # right branch
+            if right_dataset_y.size == 0:
+                predict = np.argmax(np.bincount(y))
+                tree["right"] = {"isLeaf": True, "predict": predict}
+            elif right_dataset_y.size < 5:
+                predict = np.argmax(np.bincount(right_dataset_y))
+                tree["right"] = {"isLeaf": True, "predict": predict}
+            else:
+                tree["right"] = self._build_tree(right_dataset_X, right_dataset_y, depth-1)
+            tree["isLeaf"] = False
         return tree
 
 
@@ -76,42 +102,30 @@ class DecisionTree:
         
         return predict
 
-    def _split_data(self, X: np.ndarray, y: np.ndarray, feature_index: int, threshold: float):
+    def _split_data(self, X_sorted: np.ndarray, y_sorted: np.ndarray, pos: int):
         # (TODO) split one node into left and right node 
-        left_dataset_X = []
-        left_dataset_y = []
-        right_dataset_X = []
-        right_dataset_y = []
 
-        for i, img_feature in enumerate(X):
-            if img_feature[feature_index] <= threshold:
-                left_dataset_X.append(img_feature)
-                left_dataset_y.append(y[i])
-            else:
-                right_dataset_X.append(img_feature)
-                right_dataset_y.append(y[i])
-
-        left_dataset_X = np.array(left_dataset_X)
-        left_dataset_y = np.array(left_dataset_y)
-        right_dataset_X = np.array(right_dataset_X)
-        right_dataset_y = np.array(right_dataset_y)
+        left_dataset_X = X_sorted[:pos, :]
+        left_dataset_y = y_sorted[:pos]
+        right_dataset_X = X_sorted[pos: , :]
+        right_dataset_y = y_sorted[pos:]
         
         return left_dataset_X, left_dataset_y, right_dataset_X, right_dataset_y
 
     def _best_split(self, X: np.ndarray, y: np.ndarray):
         # (TODO) Use Information Gain to find the best split for a dataset
-        best_feature_index = 0
-        best_threshold = 0
-        max_information_gain = 0
+        best_feature_index = -1
+        best_threshold_index = -1
+        max_information_gain = -1
 
-        for feature_index in range(X.shape[1]):
+        for feature_index in tqdm(range(X.shape[1])):
 
             sorted_indices = np.argsort(X[:, feature_index])
+            X_sorted = X[sorted_indices]
+            y_sorted = y[sorted_indices]
 
-            for idx in range(X.shape[0]-1):
-
-                threshold = (X[sorted_indices[idx], feature_index] + X[sorted_indices[idx+1], feature_index])/2
-                _, left_dataset_y, _, right_dataset_y = self._split_data(X, y, feature_index, threshold)
+            for threshold_index in range(X.shape[0]-1):
+                _, left_dataset_y, _, right_dataset_y = self._split_data(X_sorted, y_sorted, threshold_index+1)
                 information_gain = (
                     self._entropy(y) 
                     - (left_dataset_y.size/y.size)*self._entropy(left_dataset_y) 
@@ -120,18 +134,19 @@ class DecisionTree:
                 if information_gain > max_information_gain:
                     max_information_gain = information_gain
                     best_feature_index = feature_index
-                    best_threshold = threshold
+                    best_threshold_index = threshold_index
 
-        return best_feature_index, best_threshold
+        return best_feature_index, best_threshold_index
 
     def _entropy(self, y: np.ndarray)->float:
         # (TODO) Return the entropy
 
         negative_entropy = 0
-        for label in range(5):
-            ratio = np.sum(y == label)/y.size
-            if ratio > 0:
-                negative_entropy += ratio*np.log2(ratio)
+        for label in np.unique(y):
+            if y.size !=0:
+                ratio = np.sum(y == label)/y.size
+                if ratio > 0:
+                    negative_entropy += ratio*np.log2(ratio)
         return -negative_entropy
 
 @torch.no_grad()
@@ -139,9 +154,10 @@ def get_features_and_labels(model: ConvNet, dataloader: DataLoader, device)->Tup
     # (TODO) Use the model to extract features from the dataloader, return the features and labels
     features = []
     labels = []
+    pool = nn.AvgPool2d(7, stride=1)
     for images, label in dataloader:
         images = images.to(device)
-        feature = model(images)
+        feature = pool(model.model.forward_features(images)).squeeze(-1).squeeze(-1)
         labels.append(label.cpu().numpy())
         features.append(feature.cpu().numpy())
     labels = np.concatenate(labels, axis=0)
@@ -153,9 +169,10 @@ def get_features_and_paths(model: ConvNet, dataloader: DataLoader, device)->Tupl
     # (TODO) Use the model to extract features from the dataloader, return the features and path of the images
     features = []
     paths = []
+    pool = nn.AvgPool2d(7, stride=1)
     for images, base_name in dataloader:
         images = images.to(device)
-        feature = model(images)
+        feature = pool(model.model.forward_features(images)).squeeze(-1).squeeze(-1)
         features.append(feature.cpu().numpy())
         paths = paths + [id for id in base_name]
     features = np.concatenate(features, axis=0)
